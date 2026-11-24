@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landing Page 視覺風格定位與拍課對接系統</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- html2canvas for PNG Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- Google Fonts: Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #FAF7F2;
+      color: #382D25;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.25s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="bg-[#FAF7F2] text-[#382D25] antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // =========================================================================
+    // 1. 系統設定區（可依需求微調分類選項與預設試算表 CSV 網址）
+    // =========================================================================
+    const DEFAULT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ16EDtDzX93TIMwSMcpNcUmgrSHqG3MozPuDKn-u-_n5PuUEL4JdQhVTLat_uLEjukb7glfDJ4Y27M/pub?gid=594527243&single=true&output=csv';
+
+    const TAG1_OPTIONS = [
+      { label: '職人教學', desc: '老師魅力、配方比例、深度知識' },
+      { label: '生活體驗', desc: '零門檻、下班放鬆、生活感' },
+      { label: '實作技術', desc: '操作技巧、接單量產' }
+    ];
+
+    const TAG2_OPTIONS = [
+      { label: '溫暖', desc: '暖色、柔和' },
+      { label: '細膩', desc: '淺色、襯線字' },
+      { label: '沉穩', desc: '深色系、俐落排版' },
+      { label: '活潑', desc: '插畫、高飽和色彩' },
+      { label: '鮮明', desc: '跳色、視覺張力' }
+    ];
+
+    // 舊標籤自動相容映射（確保若試算表尚未發布新版，舊標籤也能無縫對應）
+    const LEGACY_TAG_MAP = {
+      '新手療癒體驗': '生活體驗',
+      '專業職人配方': '職人教學',
+      '商業實戰變現': '實作技術',
+      '明亮溫馨': '溫暖',
+      '質感輕奢': '細膩',
+      '專業權威': '沉穩',
+      '繽紛可愛': '活潑',
+      '異國特色': '鮮明'
+    };
+
+    const normalizeTag = (val) => {
+      if (!val) return '';
+      const trimmed = val.trim();
+      return LEGACY_TAG_MAP[trimmed] || trimmed;
+    };
+
+    // 內建 V4 資料庫備援（確保離線或初次開啟時立即有 24 筆完整案例可用）
+    const DEFAULT_COURSES = [
+      { id: '1', platform: 'Heymaster', title: '【線上課程】日本主廚的夾心餅乾｜用14種常溫夾心驚喜 x 2款獨家研發餅殼，做出人氣伴手禮｜佐山真衣老師', tags: ['生活體驗', '溫暖'], url: 'https://heyheymaster.com/courses/room-temperature-filling-sandwich-cookies-online-course', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/d40d3b8f-930b-4e8c-8f12-ba31ad9397af/c36800a6-cc75-45ee-b0d5-682d5be7b300.jpg' },
+      { id: '2', platform: 'Heymaster', title: 'MYRA達克瓦茲風味學｜滿分餅殼Ｘ18款獨創內餡：紅烏龍橙花乳酪、酒鬼系列、德腸起司...｜MYRA老師', tags: ['職人教學', '細膩'], url: 'https://heyheymaster.com/courses/myra-dacquoise', image: 'https://s.teachifycdn.com/image/width=750,quality=80,format=webp/course/cover_photo/6d5ca5a2-3dfb-4595-ab4a-8a6bc1111713/d84f59a6-19d1-44f3-b093-c12c63e3f12a.jpg' },
+      { id: '3', platform: 'Heymaster', title: '異國早午餐自由搭：南洋咖哩、客家鹹豬肉、伯爵茶舒芙蕾＋5 大類延伸配菜，組合起來更豐富', tags: ['生活體驗', '溫暖'], url: 'https://heyheymaster.com/courses/mook-exotic-brunch', image: 'https://s.teachifycdn.com/image/width=750,quality=80,format=webp/course/cover_photo/1d7dc8f3-85d4-4e12-83f9-db0f1b381af5/274b4f84-35d5-42ff-9097-0304da800aba.jpg' },
+      { id: '4', platform: 'Heymaster', title: '烘焙創業全方位實戰課｜黃金創業公式Ｘ烘焙爆品邏輯，帶你穩定獲利｜女子麥面包 王喬纕老師', tags: ['實作技術', '沉穩'], url: 'https://heyheymaster.com/courses/baking-business-course-womenbread', image: 'https://s.teachifycdn.com/image/width=750,quality=80,format=webp/course/cover_photo/ea14cf15-657d-401b-986b-042c7f4d6e3d/590f8029-6c54-446a-847b-c5164d0ecad7.jpg' },
+      { id: '5', platform: '知識衛星', title: '編織你的冬日韓系風格｜簡單打造 10 款穿搭單品', tags: ['生活體驗', '溫暖'], url: 'https://sat.cool/course/220', image: 'https://files.sat.cool/course/1791902414_%E9%9F%93%E5%9C%8B%E6%A3%92%E9%87%9D_%E4%B8%BB%E8%A6%96%E8%A6%BA_%E8%AA%B2%E7%A8%8B%E5%8D%A1_872x480.jpg' },
+      { id: '6', platform: '知識衛星', title: '0 失誤低脂甜點實驗室｜打造不甜、不膩、無負擔的美好心意', tags: ['生活體驗', '細膩'], url: 'https://sat.cool/course/163', image: 'https://sat-knowledge.imgix.net/course/1765362096_%E5%B0%8F%E6%AF%94%E5%88%A9_%E4%B8%BB%E8%A6%96%E8%A6%BA_%E7%AB%99%E5%85%A7%E8%AA%B2%E7%A8%8B%E5%8D%A1_872x480-2.jpg?fit=crop&auto=format&ar=16:9&w=520' },
+      { id: '7', platform: 'Pressplay', title: '小資本也能開始的韓貨品味變現課：花花帶你無痛開啟副業，打造一眼被記住的商業思維課程', tags: ['實作技術', '細膩'], url: 'https://www.pressplay.cc/project/BD90F4ADF8C91FB4352B3FB6B6FFAE91/about', image: 'https://static.pressplay.cc/static/uploads/enh_kv/res/project/BD90F4ADF8C91FB4352B3FB6B6FFAE91/f6a299c8733786517079e38fa3aa9746_resized.jpg' },
+      { id: '8', platform: 'Pressplay', title: '手搖甜點學｜10款精品茶點╳ 茶風味萬用公式', tags: ['職人教學', '細膩'], url: 'https://www.pressplay.cc/project/5590C5479D53BCF7F04D60CEBF43CBAB/about', image: 'https://static.pressplay.cc/static/uploads/enh_kv/res/project/5590C5479D53BCF7F04D60CEBF43CBAB/d642626897e8da192691ed1c02c015ec_resized.jpg' },
+      { id: '9', platform: 'Heymaster', title: '【線上課程】跟著四季水果做甜點｜水果黃金處理法則Ｘ打造13款果香甜點｜Ivy 主廚', tags: ['職人教學', '細膩'], url: 'https://heyheymaster.com/courses/seasonal-fruit-desserts', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/6d7816e3-5966-4457-81d0-edefb775a676/4e97e85c-a98d-4889-8753-8da013ee4226.jpg' },
+      { id: '10', platform: 'Heymaster', title: '【線上課程】歐式麵包全方位實戰課｜低糖低油Ｘ無糖無油，出爐16款好吃又好賣的歐包｜女子麥面包 王喬纕老師', tags: ['實作技術', '溫暖'], url: 'https://heyheymaster.com/courses/artisan-bread-course-womenbread', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/dd612ef6-1181-4c62-bccf-58dde8d654fa/f194ce1f-c3bc-46fc-a825-ca2cc68839bd.jpg' },
+      { id: '11', platform: 'Heymaster', title: '【線上課程】林庚辰的磅蛋糕專修｜重整邏輯＋技法實戰養成，用磅蛋糕拆解常溫烘焙核心｜林庚辰老師', tags: ['職人教學', '沉穩'], url: 'https://heyheymaster.com/courses/pound-cake-masterclass-with-chef-lin', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/ced5bee8-5800-4a4d-aede-2319049281d7/a9fe4939-de8b-4ffe-ae4d-18497f6d8560.jpg' },
+      { id: '12', platform: 'Heymaster', title: '【線上課程】烤出完美荷蘭千層蛋糕｜經典Ｘ乳酪Ｘ慕斯，職人教你14款夢幻新風味｜王澤老師', tags: ['職人教學', '溫暖'], url: 'https://heyheymaster.com/courses/dutch-layer-cake-online-course', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/f5f5e54b-5972-406e-954b-510ca1ab57ab/30e2d5f2-1d25-4ef1-8ecd-1c99dfbcf5d9.jpg' },
+      { id: '13', platform: 'Heymaster', title: '【線上課程】歡迎來到司康小売所：鐵觀音奶蓋、太妃海鹽、創意蛋塔、菠蘿司康...從第一顆司康就成功！', tags: ['生活體驗', '溫暖'], url: 'https://heyheymaster.com/courses/tutukakiscone', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/a7a43569-65f2-4e87-97c4-49ec84b31d4d/4f9413e9-81ab-4df7-b086-262bab6861fa.jpg' },
+      { id: '14', platform: 'Heymaster', title: '【線上課程】何爺爺的百變餃子｜天然五色水餃、爆汁小籠湯包、四喜燒賣...15款老饕級美味！｜何金源老師', tags: ['職人教學', '鮮明'], url: 'https://heyheymaster.com/courses/versatiledumplings', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/9876c902-2514-4341-a6c0-fb25d8177a19/0cdb75de-9172-42fd-a962-ad201d0104d8.jpg' },
+      { id: '15', platform: 'Heymaster', title: '【第 1 集】手工冰淇淋風味之旅｜18球義式Ｘ法式Ｘ雪酪冰淇淋品味地圖｜邊境法式點心坊 Jason老師', tags: ['生活體驗', '活潑'], url: 'https://heyheymaster.com/courses/handcrafted-ice-cream-journey', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/f1500c47-badf-450e-bf20-2b9911c7d948/f77cdec7-3278-4279-92d5-458e4df28af1.jpg' },
+      { id: '16', platform: 'Heymaster', title: '【線上課程】百變鹽可頌物語｜17 款店家激推風味Ｘ營業級萬用麵團Ｘ實用技巧大公開｜阿米麵包 阿明師', tags: ['生活體驗', '活潑'], url: 'https://heyheymaster.com/courses/versatile-sea-salt-butter-roll', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/bf221e29-4a76-4c05-9ec2-90c9e8c405bd/8df3f22e-230f-470b-a57f-05dd9c94621e.jpg' },
+      { id: '17', platform: 'Heymaster', title: '【線上課程】歡迎光臨韓式貝果店！手作15款韓系X美式貝果：韭菜乳酪、焦糖布蕾、川味麻辣燙…｜詹玠倫老師', tags: ['生活體驗', '鮮明'], url: 'https://heyheymaster.com/courses/welcome-to-the-korean-bagel-shop', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/53ffebc6-6eff-4290-a6ac-02ecd217392c/7ea5a8d5-25d1-47f7-a39c-341d0de297df.jpg' },
+      { id: '18', platform: 'Heymaster', title: '【線上課程】造型蛋糕萬用公式：18種核心技法＋45款練習圖鑑＋經營秘笈 = 接單成功！｜Someday有一天甜點工作室 阿瑋老師', tags: ['生活體驗', '活潑'], url: 'https://heyheymaster.com/courses/styling-cake-someday', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/a433efae-2143-4f63-814a-bfb1e3e36653/95e44804-20c3-433a-aee4-b4705b9a5233.jpg' },
+      { id: '19', platform: 'Heymaster', title: '【全新主題】一起把饅頭變可愛｜６款銀絲卷Ｘ漢堡饅頭，萌度滿分上桌！', tags: ['生活體驗', '活潑'], url: 'https://heyheymaster.com/courses/cute-steamed-buns-online-course-extras', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/ba912353-70ae-4215-bfaa-d9f45e407ad0/27e7a039-149c-4b87-8a71-a7f5942c7488.jpg' },
+      { id: '20', platform: 'Heymaster', title: '【線上課程】韓式馬卡龍的繽紛派對｜掌握打發、調色與裝飾技巧，做出 8 款可愛造型餅殼Ｘ15 種創意厚餡｜ZZY Dessert 小邊老師', tags: ['生活體驗', '活潑'], url: 'https://heyheymaster.com/courses/korean-macaron-by-zzy-desert', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/ded18626-2599-4b41-9d84-f62c461aa352/d331dec0-e15d-4ed5-b7d2-d200f4e18f4c.jpg' },
+      { id: '21', platform: 'Heymaster', title: '【線上課程】中式餅的鹹甜交鋒：10款茶香餅、歲月酥、滷肉餅...飄香上桌！鹹香到輕盈甜感一次滿足｜女子麥面包 王喬纕老師', tags: ['職人教學', '鮮明'], url: 'https://heyheymaster.com/courses/sweet-savory-pastries-by-womenbread', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/9618aa00-e4c3-49cb-93b3-af34b3e93bd8/3d187088-5e07-4bb4-9195-8bc066e5988d.jpg' },
+      { id: '22', platform: 'Heymaster', title: '【線上課程】從紐約來的起司蛋糕！解秘名店配方，玩變11種爆款起司蛋糕｜ChizUP! 美式濃郁起司蛋糕', tags: ['職人教學', '鮮明'], url: 'https://heyheymaster.com/courses/chizup-cheesecake-from-ny', image: 'https://s.teachifycdn.com/image/width=1200,quality=80/course/cover_photo/a3c57a04-a88c-47c9-b5f0-5c6b579f12c7/d128296a-ac5f-4831-b3c4-d335740fcf07.jpg' },
+      { id: '23', platform: '知識衛星', title: '【Vincent 余鎮文線上課程】商業解碼創造你的認知Alpha｜從投資視角看穿全局，建立決策優勢', tags: ['實作技術', '沉穩'], url: 'https://sat.cool/course/222', image: 'https://files.sat.cool/course/1792149228_%E8%AA%B2%E7%A8%8B%E5%8D%A1_872x480.jpg' },
+      { id: '24', platform: '知識衛星', title: '【吳吉珠 오길주線上課程】韓系氛圍彩妝提案｜解鎖韓妝清透高級感公式', tags: ['職人教學', '細膩'], url: 'https://sat.cool/course/145', image: 'https://files.sat.cool/course/1752493412_%E5%B0%81%E9%9D%A2_872x480-100.jpg' }
+    ];
+
+    // CSV 解析器
+    const parseCSV = (str) => {
+      const arr = [];
+      let quote = false;
+      let row = 0, col = 0;
+      for (let c = 0; c < str.length; c++) {
+        let cc = str[c], nc = str[c+1];
+        arr[row] = arr[row] || [];
+        if (cc === '"' && quote && nc === '"') { arr[row][col] += cc; ++c; continue; }
+        if (cc === '"') { quote = !quote; continue; }
+        if (cc === ',' && !quote) { ++col; continue; }
+        if (cc === '\r' && nc === '\n' && !quote) { ++row; col = 0; ++c; continue; }
+        if (cc === '\n' && !quote) { ++row; col = 0; continue; }
+        if (cc === '\r' && !quote) { ++row; col = 0; continue; }
+        arr[row][col] = (arr[row][col] || '') + cc;
+      }
+      if (arr.length === 0) return [];
+      const headers = arr[0];
+      const data = [];
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i].length <= 1 && !arr[i][0]) continue;
+        const obj = {};
+        headers.forEach((h, j) => {
+          obj[h ? h.trim() : `Column_${j}`] = arr[i][j] ? arr[i][j].trim() : '';
+        });
+        data.push(obj);
+      }
+      return data;
+    };
+
+    // Base64 UTF-8 編解碼（供整頁交接網址分享使用）
+    const encodeShareState = (obj) => {
+      try {
+        const json = JSON.stringify(obj);
+        const bytes = new TextEncoder().encode(json);
+        let bin = '';
+        bytes.forEach((b) => { bin += String.fromCharCode(b); });
+        return btoa(bin);
+      } catch (e) {
+        return '';
+      }
+    };
+
+    const decodeShareState = (str) => {
+      try {
+        const bin = atob(str);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const json = new TextDecoder().decode(bytes);
+        return JSON.parse(json);
+      } catch (e) {
+        return null;
+      }
+    };
+
+    function DesignIntakeSystem() {
+      const [csvUrl, setCsvUrl] = useState(() => localStorage.getItem('lp_custom_csv_url') || DEFAULT_CSV_URL);
+      const [showCsvModal, setShowCsvModal] = useState(false);
+      const [tempCsvUrl, setTempCsvUrl] = useState(csvUrl);
+
+      const [coursesDatabase, setCoursesDatabase] = useState(DEFAULT_COURSES);
+      const [isLoadingDB, setIsLoadingDB] = useState(true);
+      const [showAllModal, setShowAllModal] = useState(false);
+      const [toastMsg, setToastMsg] = useState('');
+      const [isSharedView, setIsSharedView] = useState(false);
+      const [isExportingPng, setIsExportingPng] = useState(false);
+
+      const handoverCardRef = useRef(null);
+
+      const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(''), 3500);
+      };
+
+      // 同步 Google 試算表 CSV 資料
+      const fetchSheetData = async (targetUrl) => {
+        setIsLoadingDB(true);
+        const cacheBuster = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+        const urlsToTry = [
+          cacheBuster,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(cacheBuster)}`
+        ];
+
+        for (const u of urlsToTry) {
+          try {
+            const res = await fetch(u);
+            if (!res.ok) continue;
+            const text = await res.text();
+            if (text.includes('<html') || text.includes('<!DOCTYPE')) continue;
+
+            const parsed = parseCSV(text);
+            const formatted = parsed.map((item, idx) => {
+              const getVal = (keys) => {
+                const found = Object.keys(item).find(k => keys.includes(k.trim().toLowerCase()));
+                return found ? item[found] : '';
+              };
+              const id = getVal(['id', '編號', '序號']) || String(idx + 1);
+              const platform = getVal(['platform', '平台', '平台名稱']) || '其他';
+              const title = getVal(['title', '課程名稱', '名稱', '課名', '專案名稱']);
+              const t1 = normalizeTag(getVal(['tag1', 'tag 1', 'tag_1', '賣點', '主要吸引力', '課程賣點']));
+              const t2 = normalizeTag(getVal(['tag2', 'tag 2', 'tag_2', '風格', '視覺氛圍', '視覺風格']));
+              const image = getVal(['image_url', 'image', '圖片網址', '圖片連結', '封面圖', '圖片']);
+              const url = getVal(['url', '課程網址', '課程連結', '連結']);
+
+              return {
+                id,
+                platform,
+                title,
+                tags: [t1, t2].filter(Boolean),
+                image,
+                url
+              };
+            }).filter(c => c.title);
+
+            if (formatted.length > 0) {
+              setCoursesDatabase(formatted);
+              setIsLoadingDB(false);
+              return;
+            }
+          } catch (e) {
+            // 繼續嘗試備援通道
+          }
+        }
+        // 若網路受限或尚未發布，保留內建 24 筆 V4 資料
+        setIsLoadingDB(false);
+      };
+
+      useEffect(() => {
+        fetchSheetData(csvUrl);
+      }, [csvUrl]);
+
+      // Step 1: 專案基本資料
+      const [formData, setFormData] = useState({
+        teacherName: '',
+        courseItem: '',
+        courseFeatures: '',
+        competitors: [{ url: '', note: '' }]
+      });
+
+      // Step 2: 視覺大方向收斂
+      const [visionData, setVisionData] = useState({ tag1: '', tag2: '' });
+
+      // Step 3: 拍課包裝企劃
+      const [packData, setPackData] = useState({
+        spaces: [{ image: '', desc: '' }],
+        teachers: [{ image: '', desc: '' }],
+        props: [{ image: '', desc: '' }]
+      });
+
+      // 檢查網址是否帶有 #share= 交接單參數
+      useEffect(() => {
+        const hash = window.location.hash;
+        if (hash && hash.startsWith('#share=')) {
+          const encoded = hash.replace('#share=', '');
+          const decoded = decodeShareState(encoded);
+          if (decoded) {
+            if (decoded.formData) setFormData(prev => ({ ...prev, ...decoded.formData }));
+            if (decoded.visionData) setVisionData(decoded.visionData);
+            if (decoded.packData) setPackData(decoded.packData);
+            setIsSharedView(true);
+          }
+        }
+      }, []);
+
+      // Step 1 操作
+      const addCompetitor = () => setFormData({ ...formData, competitors: [...formData.competitors, { url: '', note: '' }] });
+      const updateCompetitor = (index, field, value) => {
+        const newComp = [...formData.competitors];
+        newComp[index][field] = value;
+        setFormData({ ...formData, competitors: newComp });
+      };
+      const removeCompetitor = (index) => {
+        const newComp = [...formData.competitors];
+        newComp.splice(index, 1);
+        setFormData({ ...formData, competitors: newComp });
+      };
+
+      // Step 2 嚴格雙重條件比對（必須同時選定且兩個標籤皆相符）
+      const matchedCourses = useMemo(() => {
+        if (!visionData.tag1 || !visionData.tag2) return [];
+        return coursesDatabase.filter(c =>
+          c.tags.includes(visionData.tag1) && c.tags.includes(visionData.tag2)
+        );
+      }, [visionData.tag1, visionData.tag2, coursesDatabase]);
+
+      const selectedStyleName = useMemo(() => {
+        if (!visionData.tag1 || !visionData.tag2) return '';
+        return `${visionData.tag1} × ${visionData.tag2}`;
+      }, [visionData.tag1, visionData.tag2]);
+
+      // Step 3 圖文操作
+      const handlePackChange = (category, index, field, value) => {
+        const newData = { ...packData };
+        newData[category][index][field] = value;
+        setPackData(newData);
+      };
+      const addPackItem = (category) => {
+        setPackData({ ...packData, [category]: [...packData[category], { image: '', desc: '' }] });
+      };
+      const removePackItem = (category, index) => {
+        const newData = { ...packData };
+        newData[category].splice(index, 1);
+        setPackData(newData);
+      };
+
+      const handleFileUpload = (category, index, file) => {
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          handlePackChange(category, index, 'image', e.target.result);
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const handlePasteImage = (e, category, index) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const file = items[i].getAsFile();
+            handleFileUpload(category, index, file);
+            showToast('📸 已從剪貼簿貼上截圖！');
+            break;
+          }
+        }
+      };
+
+      // 渲染 Step 3 一列三張卡片（1:1 方形上圖 ＋ 下文）
+      const renderDynamicGrid = (title, category, placeholderDesc) => (
+        <div className="mb-8 bg-[#FAF7F2]/60 p-5 rounded-2xl border border-[#EBE4D8]">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-[#382D25] text-base">{title}</h3>
+            <button
+              type="button"
+              onClick={() => addPackItem(category)}
+              className="text-xs font-bold text-[#7a5e48] hover:text-[#382D25] bg-white border border-[#EBE4D8] px-3 py-1.5 rounded-lg shadow-xs transition-colors"
+            >
+              + 新增項目
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {packData[category].map((item, i) => (
+              <div
+                key={i}
+                onPaste={(e) => handlePasteImage(e, category, i)}
+                className="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs flex flex-col justify-between relative group"
+              >
+                {packData[category].length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removePackItem(category, i)}
+                    title="刪除此卡片"
+                    className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-stone-100 hover:bg-red-50 text-stone-400 hover:text-red-500 flex items-center justify-center text-sm font-bold transition-colors z-10"
+                  >
+                    ×
+                  </button>
+                )}
+
+                {/* 上半部：1:1 方形圖片預覽與網址/上傳操作 */}
+                <div>
+                  <div className="text-[11px] font-bold text-stone-400 mb-2">項目 #{i + 1}</div>
+                  <div className="relative w-full pb-[100%] bg-stone-100 rounded-lg overflow-hidden border border-stone-200 mb-2.5">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={`參考圖 ${i + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        style={{ display: item.image ? 'none' : 'flex' }}
+                        className="flex-col items-center justify-center text-center p-3 text-stone-400"
+                      >
+                        <span className="text-2xl mb-1.5">🖼️</span>
+                        <span className="text-[11px] leading-relaxed">貼上圖片網址、上傳圖檔<br/>或點此按 Ctrl+V 貼上截圖</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-1.5 mb-2.5">
+                    <input
+                      type="text"
+                      placeholder="貼上參考圖片網址..."
+                      className="min-w-0 flex-1 p-2 text-xs border border-stone-200 rounded-lg outline-none focus:border-[#9C795E] bg-stone-50 focus:bg-white"
+                      value={item.image.startsWith('data:image') ? '（已上傳本機圖片）' : item.image}
+                      onChange={(e) => handlePackChange(category, i, 'image', e.target.value)}
+                    />
+                    <label className="cursor-pointer shrink-0 whitespace-nowrap bg-[#FAF7F2] hover:bg-[#f0e9df] text-[#7a5e48] border border-[#EBE4D8] px-2.5 py-2 rounded-lg text-xs font-bold flex items-center transition-colors">
+                      上傳圖片
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(category, i, e.target.files[0])}
+                      />
+                    </label>
+                    {item.image && (
+                      <button
+                        type="button"
+                        onClick={() => handlePackChange(category, i, 'image', '')}
+                        className="shrink-0 whitespace-nowrap text-xs text-stone-400 hover:text-red-500 px-1"
+                        title="清除圖片"
+                      >
+                        清除
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 下半部：圖片正下方說明欄位 */}
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-500 mb-1">畫面與需求說明</label>
+                  <textarea
+                    rows="2"
+                    placeholder={placeholderDesc}
+                    className="w-full p-2 text-xs border border-stone-200 rounded-lg outline-none focus:ring-1 focus:ring-[#9C795E] resize-none"
+                    value={item.desc}
+                    onChange={(e) => handlePackChange(category, i, 'desc', e.target.value)}
+                  ></textarea>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+      // 組裝純文字交接單
+      const buildPlainText = () => {
+        let md = `📋 【Landing Page 設計與拍課交接單】\n\n`;
+        md += `### 📝 基本資料\n`;
+        md += `- 老師 / 品牌：${formData.teacherName || '未填'}\n`;
+        md += `- 課程品項：${formData.courseItem || '未填'}\n`;
+        md += `- 課程特色：${formData.courseFeatures || '未填'}\n\n`;
+
+        const validComps = formData.competitors.filter(c => c.url || c.note);
+        if (validComps.length > 0) {
+          md += `🔍 競品對標參考：\n`;
+          validComps.forEach((c, i) => {
+            md += `  ${i + 1}. ${c.url || '未附連結'} ｜ 參考重點：${c.note || '無'}\n`;
+          });
+          md += `\n`;
+        }
+
+        md += `### 🎨 視覺大方向\n`;
+        md += `- 主要吸引力：${visionData.tag1 || '未選'}\n`;
+        md += `- 頁面視覺氛圍：${visionData.tag2 || '未選'}\n`;
+        if (selectedStyleName) md += `- 系統判定平面風格：${selectedStyleName}\n`;
+        md += `\n`;
+
+        const formatPackSection = (label, list) => {
+          let sec = `${label}：\n`;
+          const valid = list.filter(item => item.image || item.desc);
+          if (valid.length === 0) return sec + `  - 無\n`;
+          valid.forEach((item, idx) => {
+            const imgText = item.image
+              ? (item.image.startsWith('data:image') ? '[本機上傳截圖，請見隨附 PNG 長圖]' : item.image)
+              : '無圖片';
+            sec += `  ${idx + 1}. 說明：${item.desc || '無'} ｜ 參考圖：${imgText}\n`;
+          });
+          return sec;
+        };
+
+        md += `### 🎬 拍課包裝企劃\n`;
+        md += formatPackSection('1. 課程空間意象', packData.spaces);
+        md += formatPackSection('2. 包裝老師風格與參考照片', packData.teachers);
+        md += formatPackSection('3. 場景道具清單', packData.props);
+
+        md += `\n---\n⚠️ 備註說明：設計如需添購道具，需於拍課前 1~2 週下單。\n`;
+        return md;
+      };
+
+      const handleCopyPlainText = () => {
+        navigator.clipboard.writeText(buildPlainText());
+        showToast('📋 已複製純文字交接單！');
+      };
+
+      const handleCopySectionText = (text, label) => {
+        navigator.clipboard.writeText(text);
+        showToast(`📋 已複製「${label}」文字！`);
+      };
+
+      // 匯出 PNG 圖文長圖
+      const handleDownloadPng = async () => {
+        if (!handoverCardRef.current || typeof window.html2canvas === 'undefined') {
+          showToast('⚠️ 圖片轉換元件載入中，請稍候再試。');
+          return;
+        }
+        setIsExportingPng(true);
+        try {
+          const canvas = await window.html2canvas(handoverCardRef.current, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#FFFFFF'
+          });
+          const dataUrl = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          const fileName = `LP交接單_${formData.courseItem || formData.teacherName || '專案'}.png`;
+          link.download = fileName;
+          link.href = dataUrl;
+          link.click();
+          showToast('🖼️ 圖文交接單 (PNG 長圖) 已下載！可直接拖曳至 Slack');
+        } catch (err) {
+          console.error(err);
+          showToast('⚠️ 圖片匯出遇到跨網域圖片限制，建議改用截圖或複製交接網址。');
+        } finally {
+          setIsExportingPng(false);
+        }
+      };
+
+      // 複製整頁交接網址
+      const handleCopyShareUrl = () => {
+        const sanitizeList = (list) =>
+          list.map(item => ({
+            desc: item.desc,
+            image: item.image && item.image.startsWith('data:image') ? '__LOCAL_IMAGE__' : item.image
+          }));
+
+        const payload = {
+          formData,
+          visionData,
+          packData: {
+            spaces: sanitizeList(packData.spaces),
+            teachers: sanitizeList(packData.teachers),
+            props: sanitizeList(packData.props)
+          }
+        };
+        const encoded = encodeShareState(payload);
+        const baseUrl = window.location.href.split('#')[0];
+        const shareUrl = `${baseUrl}#share=${encoded}`;
+        navigator.clipboard.writeText(shareUrl);
+        if (window.location.protocol === 'file:') {
+          showToast('🔗 已複製交接網址！（提醒：本機檔案需上傳至網路空間後，其他人才能點開連結喔）');
+        } else {
+          showToast('🔗 已複製整頁交接網址！設計師點開即可瀏覽與複製文字');
+        }
+      };
+
+      // 交接單預覽卡片內的三欄圖文渲染（1:1 方形圖片）
+      const renderHandoverGrid = (items) => {
+        const validItems = items.filter(it => it.image || it.desc);
+        if (validItems.length === 0) {
+          return <p className="text-xs text-stone-400 italic">尚未填寫項目</p>;
+        }
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+            {validItems.map((it, idx) => (
+              <div key={idx} className="border border-stone-200 rounded-lg overflow-hidden bg-[#FAF7F2]/50">
+                {it.image === '__LOCAL_IMAGE__' ? (
+                  <div className="relative w-full pb-[100%] bg-amber-50">
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-amber-700 font-bold px-3 text-center">
+                      📎 本機上傳圖片（請見隨附 PNG 長圖）
+                    </div>
+                  </div>
+                ) : it.image ? (
+                  <div className="relative w-full pb-[100%] bg-stone-100 overflow-hidden">
+                    <div className="absolute inset-0">
+                      <img src={it.image} alt={`參考 ${idx + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                ) : null}
+                <div className="p-2.5 text-xs text-stone-700 leading-relaxed">
+                  <span className="font-bold text-[#9C795E] mr-1">#{idx + 1}</span>
+                  {it.desc || '（無文字說明）'}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      return (
+        <div className="min-h-screen bg-[#FAF7F2] pb-16">
+          {/* 浮動提示 Toast */}
+          {toastMsg && (
+            <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-[#382D25] text-white px-6 py-3 rounded-full shadow-xl text-sm font-bold z-50 animate-fade-in">
+              {toastMsg}
+            </div>
+          )}
+
+          {/* 分享連結開啟提示橫幅 */}
+          {isSharedView && (
+            <div className="bg-[#9C795E] text-white text-center py-2.5 px-4 text-sm font-bold shadow-xs">
+              📩 已載入 PM 分享的交接單，可直接瀏覽圖文並複製所需文字
+            </div>
+          )}
+
+          {/* 頂部導航與標題區 */}
+          <header className="max-w-4xl mx-auto pt-8 pb-6 px-4 text-center">
+            <h1 className="text-2xl md:text-3xl font-black text-[#382D25] tracking-tight mb-2">
+              📝 視覺風格定位與拍課對接系統
+            </h1>
+            <p className="text-[#9C795E] text-sm md:text-base font-medium">
+              將發散的視覺想像，收斂為具體的設計語言與拍課企劃
+            </p>
+
+            {/* 資料庫狀態列 */}
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+              <div className="inline-flex items-center text-xs font-bold px-3.5 py-1.5 bg-[#f0e9df] text-[#7a5e48] rounded-full">
+                <span className={`w-2 h-2 rounded-full mr-2 ${isLoadingDB ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                {isLoadingDB ? '正在同步雲端過往課程資料庫...' : `已同步 ${coursesDatabase.length} 筆過往對標案例`}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAllModal(true)}
+                className="inline-flex items-center text-xs font-bold px-3.5 py-1.5 bg-white hover:bg-stone-50 text-[#382D25] border border-[#EBE4D8] rounded-full shadow-xs transition-colors"
+              >
+                📚 瀏覽全部課程
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setTempCsvUrl(csvUrl); setShowCsvModal(true); }}
+                className="inline-flex items-center text-xs font-bold px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-500 border border-[#EBE4D8] rounded-full shadow-xs transition-colors"
+                title="設定 Google 試算表 CSV 網址"
+              >
+                ⚙️ 資料來源
+              </button>
+            </div>
+          </header>
+
+          {/* 主內容區 */}
+          <main className="max-w-4xl mx-auto px-4 space-y-6">
+            {/* Step 1. 專案基本資料 */}
+            <section className="bg-white rounded-2xl shadow-xs border border-[#EBE4D8] p-6 md:p-8">
+              <h2 className="text-xl font-bold mb-6 pb-3 border-b-2 border-[#FAF7F2] text-[#382D25]">
+                Step 1. 專案基本資料
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                <div>
+                  <label className="block text-sm font-bold text-stone-600 mb-1.5">老師姓名 / 品牌名</label>
+                  <input
+                    type="text"
+                    placeholder="例如：何金源 / 璽甜．甜品工作室"
+                    className="w-full p-2.5 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-[#9C795E]"
+                    value={formData.teacherName}
+                    onChange={(e) => setFormData({ ...formData, teacherName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-stone-600 mb-1.5">課程品項</label>
+                  <input
+                    type="text"
+                    placeholder="例如：中式麵點"
+                    className="w-full p-2.5 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-[#9C795E]"
+                    value={formData.courseItem}
+                    onChange={(e) => setFormData({ ...formData, courseItem: e.target.value })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-stone-600 mb-1.5">課程特色</label>
+                  <input
+                    type="text"
+                    placeholder="例如：超多特殊口味、知識點豐富"
+                    className="w-full p-2.5 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-[#9C795E]"
+                    value={formData.courseFeatures}
+                    onChange={(e) => setFormData({ ...formData, courseFeatures: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* 競品或對標網址 */}
+              <div className="bg-[#FAF7F2] p-4 md:p-5 rounded-xl border border-[#EBE4D8]">
+                <label className="block text-sm font-bold text-[#382D25] mb-3">🔍 競品或對標網址</label>
+                {formData.competitors.map((comp, i) => (
+                  <div key={i} className="flex flex-col md:flex-row gap-2.5 mb-3">
+                    <input
+                      type="text"
+                      placeholder="貼上競品網址..."
+                      className="w-full md:w-1/3 p-2.5 text-sm bg-white border border-stone-200 rounded-xl outline-none focus:border-[#9C795E]"
+                      value={comp.url}
+                      onChange={(e) => updateCompetitor(i, 'url', e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="希望參考這家競品的哪些部分？(例如：喜歡他的版型、老師照片風格...)"
+                      className="w-full md:flex-1 p-2.5 text-sm bg-white border border-stone-200 rounded-xl outline-none focus:border-[#9C795E]"
+                      value={comp.note}
+                      onChange={(e) => updateCompetitor(i, 'note', e.target.value)}
+                    />
+                    {formData.competitors.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeCompetitor(i)}
+                        className="text-stone-400 hover:text-red-500 px-2.5 font-bold text-lg self-center"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addCompetitor}
+                  className="text-xs font-bold text-[#7a5e48] hover:text-[#382D25] bg-white border border-[#EBE4D8] px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  + 新增一筆競品參考
+                </button>
+              </div>
+            </section>
+
+            {/* Step 2. 視覺大方向收斂 */}
+            <section className="bg-white rounded-2xl shadow-xs border border-[#EBE4D8] p-6 md:p-8">
+              <h2 className="text-xl font-bold mb-6 pb-3 border-b-2 border-[#FAF7F2] text-[#382D25]">
+                Step 2. 視覺大方向收斂
+              </h2>
+
+              {/* Q1 */}
+              <div className="mb-8">
+                <p className="font-bold text-[#382D25] mb-3">Q1. 這堂課的主要吸引力是什麼？</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {TAG1_OPTIONS.map((opt) => {
+                    const active = visionData.tag1 === opt.label;
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => setVisionData({ ...visionData, tag1: opt.label })}
+                        className={`p-4 rounded-xl border-2 text-left transition-all ${
+                          active
+                            ? 'border-[#9C795E] bg-[#FAF7F2] shadow-xs'
+                            : 'border-stone-100 hover:border-stone-200 bg-white'
+                        }`}
+                      >
+                        <div className={`font-bold text-base ${active ? 'text-[#7a5e48]' : 'text-stone-700'}`}>
+                          {opt.label}
+                        </div>
+                        <div className="text-xs text-stone-500 mt-1.5">{opt.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Q2 */}
+              <div className="mb-6">
+                <p className="font-bold text-[#382D25] mb-3">Q2. 希望頁面呈現哪種視覺氛圍？</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {TAG2_OPTIONS.map((opt) => {
+                    const active = visionData.tag2 === opt.label;
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => setVisionData({ ...visionData, tag2: opt.label })}
+                        className={`p-3.5 rounded-xl border-2 text-left transition-all ${
+                          active
+                            ? 'border-[#9C795E] bg-[#FAF7F2] shadow-xs'
+                            : 'border-stone-100 hover:border-stone-200 bg-white'
+                        }`}
+                      >
+                        <div className={`font-bold text-sm ${active ? 'text-[#7a5e48]' : 'text-stone-700'}`}>
+                          {opt.label}
+                        </div>
+                        <div className="text-xs text-stone-400 mt-1.5 leading-relaxed">{opt.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 即時風格對應結果（嚴格雙重條件） */}
+              {visionData.tag1 && visionData.tag2 && (
+                <div className="mt-8 bg-[#FAF7F2] p-6 rounded-2xl border border-[#EBE4D8] animate-fade-in">
+                  <h3 className="text-[#7a5e48] font-black text-lg mb-3">🎯 即時風格對應結果</h3>
+                  <p className="font-bold text-stone-700 mb-5 flex flex-wrap items-center gap-2">
+                    <span>📍 系統判定平面風格：</span>
+                    <span className="bg-white text-[#382D25] px-3.5 py-1 rounded-lg border border-[#EBE4D8] shadow-xs">
+                      {selectedStyleName}
+                    </span>
+                  </p>
+
+                  <div className="border-t border-[#EBE4D8] pt-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-bold text-stone-700">📚 資料庫過往相似課程案例：</p>
+                      <span className="text-xs font-bold bg-[#EBE4D8] text-[#7a5e48] px-2.5 py-0.5 rounded-full">
+                        {matchedCourses.length} 筆相符
+                      </span>
+                    </div>
+
+                    {matchedCourses.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {matchedCourses.map((c) => (
+                          <a
+                            key={c.id}
+                            href={c.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="group block bg-white rounded-xl overflow-hidden border border-stone-200 shadow-xs hover:shadow-md transition-all"
+                          >
+                            <div className="h-32 bg-stone-100 relative overflow-hidden">
+                              {c.image ? (
+                                <img
+                                  src={c.image}
+                                  alt={c.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className="flex items-center justify-center h-full text-xs text-stone-400">無封面圖</div>
+                              )}
+                              <span className="absolute top-2 right-2 text-[10px] font-bold bg-black/65 text-white px-2 py-0.5 rounded-md">
+                                {c.platform}
+                              </span>
+                            </div>
+                            <div className="p-3">
+                              <p className="text-xs font-bold text-stone-800 line-clamp-2 mb-2 leading-snug">
+                                {c.title}
+                              </p>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {c.tags.map((t) => (
+                                  <span key={t} className="text-[10px] font-bold bg-[#FAF7F2] text-[#9C795E] px-2 py-0.5 rounded">
+                                    #{t}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-white text-stone-500 text-sm p-5 rounded-xl border border-[#EBE4D8] text-center">
+                        目前雲端資料庫尚無同時符合「{visionData.tag1}」與「{visionData.tag2}」的案例，等待未來新增！
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Step 3. 拍課包裝企劃 */}
+            <section className="bg-white rounded-2xl shadow-xs border border-[#EBE4D8] p-6 md:p-8">
+              <h2 className="text-xl font-bold mb-2 text-[#382D25]">Step 3. 拍課包裝企劃</h2>
+              <p className="text-sm text-stone-500 mb-6 pb-3 border-b-2 border-[#FAF7F2]">
+                請貼上參考圖片網址（或上傳圖片 / Ctrl+V 貼上截圖）並填寫描述，系統將會自動整合成完整企劃清單。
+              </p>
+
+              {renderDynamicGrid('1. 課程空間意象', 'spaces', '例如：繽紛的糖果實驗室、復古東方茶館...')}
+              {renderDynamicGrid('2. 包裝老師風格與參考照片', 'teachers', '例如：受媽媽們喜愛的帥氣老師...')}
+              {renderDynamicGrid('3. 場景道具清單', 'props', '例如：竹編蒸籠、木製粿印模具、馬卡龍色系背景紙...')}
+            </section>
+
+            {/* Step 4. 生成交接單 */}
+            <section className="bg-white rounded-2xl shadow-xs border border-[#EBE4D8] p-6 md:p-8">
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold mb-2 text-[#382D25]">Step 4. 生成交接單</h2>
+                <p className="text-sm text-stone-500">
+                  所有資料填寫完畢後，可下載圖文長圖貼至 Slack，或複製交接網址 / 純文字交接單。
+                </p>
+              </div>
+
+              {/* 三大操作按鈕 */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
+                <button
+                  type="button"
+                  onClick={handleDownloadPng}
+                  disabled={isExportingPng}
+                  className="w-full sm:w-auto px-6 py-3.5 bg-[#382D25] hover:bg-[#2a211b] text-white text-sm font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+                >
+                  {isExportingPng ? '⏳ 正在產生圖文長圖...' : '🖼️ 下載圖文交接單 (PNG 長圖)'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyShareUrl}
+                  className="w-full sm:w-auto px-6 py-3.5 bg-[#9C795E] hover:bg-[#85654d] text-white text-sm font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+                >
+                  🔗 複製整頁交接網址
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyPlainText}
+                  className="w-full sm:w-auto px-6 py-3.5 bg-[#FAF7F2] hover:bg-[#f0e9df] text-[#382D25] border border-[#EBE4D8] text-sm font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  📋 一鍵複製純文字交接單
+                </button>
+              </div>
+
+              {/* 即時圖文交接單預覽卡片（供匯出 PNG 與設計師直接檢視複製） */}
+              <div
+                ref={handoverCardRef}
+                className="bg-white border-2 border-[#EBE4D8] rounded-2xl p-6 md:p-8 shadow-xs"
+              >
+                <div className="flex items-center justify-between border-b-2 border-[#FAF7F2] pb-4 mb-5">
+                  <h3 className="text-lg md:text-xl font-black text-[#382D25]">
+                    📋 【Landing Page 設計與拍課交接單】
+                  </h3>
+                  <span className="text-xs font-bold text-[#9C795E] bg-[#FAF7F2] px-3 py-1 rounded-full">
+                    {formData.courseItem || '新開課程專案'}
+                  </span>
+                </div>
+
+                {/* 基本資料摘要 */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-bold text-[#7a5e48]">📝 專案基本資料</h4>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopySectionText(
+                          `老師/品牌：${formData.teacherName}\n課程品項：${formData.courseItem}\n課程特色：${formData.courseFeatures}`,
+                          '基本資料'
+                        )
+                      }
+                      className="text-[11px] text-stone-400 hover:text-[#382D25] underline"
+                    >
+                      複製此區文字
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-[#FAF7F2] p-4 rounded-xl">
+                    <div><span className="text-stone-400 font-bold">老師 / 品牌：</span>{formData.teacherName || '未填'}</div>
+                    <div><span className="text-stone-400 font-bold">課程品項：</span>{formData.courseItem || '未填'}</div>
+                    <div className="sm:col-span-2"><span className="text-stone-400 font-bold">課程特色：</span>{formData.courseFeatures || '未填'}</div>
+                  </div>
+
+                  {/* 競品列表 */}
+                  {formData.competitors.some(c => c.url || c.note) && (
+                    <div className="mt-3 text-xs bg-stone-50 p-3.5 rounded-xl border border-stone-100">
+                      <p className="font-bold text-stone-600 mb-1.5">🔍 競品或對標參考：</p>
+                      <ul className="space-y-1.5">
+                        {formData.competitors.filter(c => c.url || c.note).map((c, idx) => (
+                          <li key={idx} className="text-stone-700 break-all">
+                            <span className="font-bold text-[#9C795E] mr-1">{idx + 1}.</span>
+                            {c.url && (
+                              <a href={c.url} target="_blank" rel="noreferrer" className="text-blue-600 underline mr-2">
+                                {c.url}
+                              </a>
+                            )}
+                            {c.note && <span>（參考重點：{c.note}）</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* 視覺定位 */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-bold text-[#7a5e48] mb-2">🎨 視覺大方向收斂</h4>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="bg-[#FAF7F2] border border-[#EBE4D8] px-3 py-1.5 rounded-lg font-bold">
+                      主要吸引力：{visionData.tag1 || '未選'}
+                    </span>
+                    <span className="bg-[#FAF7F2] border border-[#EBE4D8] px-3 py-1.5 rounded-lg font-bold">
+                      頁面視覺氛圍：{visionData.tag2 || '未選'}
+                    </span>
+                    {selectedStyleName && (
+                      <span className="bg-[#382D25] text-white px-3 py-1.5 rounded-lg font-bold">
+                        風格定位：{selectedStyleName}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 拍課企劃三欄圖文（1:1 方形圖片） */}
+                <div className="space-y-5">
+                  <div>
+                    <h4 className="text-sm font-bold text-[#7a5e48]">🎬 1. 課程空間意象</h4>
+                    {renderHandoverGrid(packData.spaces)}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-[#7a5e48]">👤 2. 包裝老師風格與參考照片</h4>
+                    {renderHandoverGrid(packData.teachers)}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-[#7a5e48]">🧺 3. 場景道具清單</h4>
+                    {renderHandoverGrid(packData.props)}
+                  </div>
+                </div>
+
+                {/* 底部提醒警語 */}
+                <div className="mt-6 pt-4 border-t border-[#EBE4D8] text-xs text-red-500 font-bold text-center">
+                  ⚠️ 備註說明：設計如需添購道具，需於拍課前 1~2 週下單。
+                </div>
+              </div>
+            </section>
+          </main>
+
+          {/* 彈窗：瀏覽全部課程 */}
+          {showAllModal && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                <div className="p-5 border-b border-stone-200 flex items-center justify-between bg-[#FAF7F2]">
+                  <h3 className="font-black text-lg text-[#382D25]">
+                    📚 雲端課程資料庫總覽（共 {coursesDatabase.length} 筆）
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllModal(false)}
+                    className="w-8 h-8 rounded-full bg-white text-stone-500 hover:text-stone-800 font-bold text-lg"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="p-5 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {coursesDatabase.map((c) => (
+                    <a
+                      key={c.id}
+                      href={c.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block bg-white rounded-xl overflow-hidden border border-stone-200 hover:shadow-md transition-all"
+                    >
+                      <div className="h-28 bg-stone-100 relative">
+                        {c.image && <img src={c.image} alt={c.title} className="w-full h-full object-cover" />}
+                        <span className="absolute top-2 right-2 text-[10px] font-bold bg-black/65 text-white px-2 py-0.5 rounded">
+                          {c.platform}
+                        </span>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-xs font-bold text-stone-800 line-clamp-2 mb-2">{c.title}</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {c.tags.map((t) => (
+                            <span key={t} className="text-[10px] font-bold bg-[#FAF7F2] text-[#9C795E] px-2 py-0.5 rounded">
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 彈窗：設定 Google 試算表 CSV 網址 */}
+          {showCsvModal && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+                <h3 className="font-black text-lg text-[#382D25] mb-2">⚙️ 設定 Google 試算表 CSV 網址</h3>
+                <p className="text-xs text-stone-500 mb-4 leading-relaxed">
+                  若您發布了新版試算表（例如 V4 資料庫），請將「檔案 &gt; 共用 &gt; 發布到網路 &gt; CSV」取得的網址貼在下方，系統會自動記憶在您的瀏覽器中。
+                </p>
+                <input
+                  type="text"
+                  placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+                  className="w-full p-2.5 text-xs border border-stone-200 rounded-xl outline-none focus:border-[#9C795E] mb-4"
+                  value={tempCsvUrl}
+                  onChange={(e) => setTempCsvUrl(e.target.value)}
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCsvModal(false)}
+                    className="px-4 py-2 text-xs font-bold text-stone-500 hover:bg-stone-100 rounded-lg"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem('lp_custom_csv_url', tempCsvUrl.trim());
+                      setCsvUrl(tempCsvUrl.trim());
+                      setShowCsvModal(false);
+                      showToast('✅ 已更新資料庫來源並重新同步！');
+                    }}
+                    className="px-4 py-2 text-xs font-bold bg-[#382D25] text-white rounded-lg"
+                  >
+                    儲存並同步
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<DesignIntakeSystem />);
+  </script>
+</body>
+</html>
